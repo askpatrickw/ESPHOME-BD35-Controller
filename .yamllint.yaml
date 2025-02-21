@@ -1,0 +1,17 @@
+extends: default
+
+yaml-files:
+  - '*.yaml'
+  - '*.yml'
+
+rules:
+  line-length: disable
+  document-start: disable
+  truthy:
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
+
+custom-tags:
+  - '!secret'
+  - '!lambda'

@@ -1,0 +1,240 @@
+esphome:
+  name: bd35_fridge_controller
+  friendly_name: "BD35 Controller"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Network Configuration
+ethernet:
+  type: LAN8720
+  mdc_pin: GPIO23
+  mdio_pin: GPIO18
+  clk_mode: GPIO17_OUT
+  phy_addr: 0
+  power_pin: GPIO12
+  manual_ip:
+    static_ip: 10.10.0.99
+    gateway: 10.10.0.1
+    subnet: 255.255.255.0
+
+# Enable Logging & API for Home Assistant
+logger:
+api:
+  encryption:
+    key: "YOUR_ENCRYPTION_KEY"
+
+ota:
+  - platform: esphome
+    password: "YOUR_OTA_PASSWORD"
+
+# WiFi Fallback Configuration
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "ESP32-Fridge-Fallback"
+    password: !secret fallback_password
+
+# Global Variables for Adaptive Cooling
+globals:
+  - id: cooling_power
+    type: float
+    restore_value: yes
+    initial_value: '0.5'  # Default 50% power
+  - id: last_power_change
+    type: float
+    restore_value: no
+    initial_value: '0'
+  - id: compressor_runtime
+    type: int
+    restore_value: yes
+    initial_value: '0'
+  - id: cycle_count
+    type: int
+    restore_value: yes
+    initial_value: '0'
+
+# Sensor Definitions
+sensor:
+  # Fridge Temperature (from Home Assistant via BLE Ruuvi)
+  - platform: homeassistant
+    entity_id: sensor.fridge_temperature
+    id: fridge_temp
+    internal: true
+
+  # Ambient Temperature (External Sensor or Home Assistant)
+  - platform: homeassistant
+    entity_id: sensor.outside_temperature
+    id: ambient_temp
+    internal: true
+
+  # System Metrics
+  - platform: template
+    name: "Compressor Runtime Hours"
+    id: runtime_hours
+    lambda: return id(compressor_runtime) / 3600.0;
+    update_interval: 60s
+    unit_of_measurement: "h"
+    accuracy_decimals: 1
+
+  - platform: template
+    name: "Compressor Cycles"
+    id: compressor_cycles
+    lambda: return id(cycle_count);
+    update_interval: 60s
+    unit_of_measurement: "cycles"
+
+# Compressor Control Components
+switch:
+  # Main Compressor Control via Optocoupler
+  - platform: gpio
+    pin: GPIO5
+    id: fridge_compressor
+    name: "Fridge Compressor"
+    inverted: true
+    on_turn_on:
+      then:
+        - lambda: 'id(cycle_count)++;'  # Increment cycle counter
+
+  # Turbo Mode (Forces full power for a set duration)
+  - platform: template
+    name: "Turbo Mode"
+    id: turbo_mode
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - switch.turn_on: fridge_compressor
+      - output.set_level:
+          id: compressor_pwm
+          level: 1.0  # 100% power
+      - delay: 30min
+      - switch.turn_off: turbo_mode
+      - output.set_level:
+          id: compressor_pwm
+          level: !lambda 'return id(cooling_power);'
+
+  # Manual Override (Forces compressor ON indefinitely)
+  - platform: template
+    name: "Manual Override"
+    id: fridge_manual_override
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+
+# PWM Speed Control for BD35 Compressor (ESP32 GPIO# → BD35 C Terminal)
+output:
+  - platform: ledc
+    pin: GPIO14
+    id: compressor_pwm
+    frequency: 50Hz  # BD35 expects 10-100Hz
+
+# Adaptive Cooling Logic
+interval:
+  - interval: 10s
+    then:
+      # Sensor validation and error handling
+      - if:
+          condition:
+            lambda: |-
+              return !isnan(id(fridge_temp).state) &&
+                     !isnan(id(ambient_temp).state) &&
+                     id(fridge_temp).state > -50 &&
+                     id(fridge_temp).state < 50 &&
+                     id(ambient_temp).state > -50 &&
+                     id(ambient_temp).state < 50;
+          then:
+            # Temperature-based speed adjustment with hysteresis
+            - lambda: |-
+                float current_time = millis() / 1000.0;
+                float time_since_last_change = current_time - id(last_power_change);
+
+                // Only allow power changes every 60 seconds (hysteresis)
+                if (time_since_last_change < 60) {
+                  return;
+                }
+
+                float new_power = id(cooling_power);
+
+                // Temperature-based adjustments
+                if (id(fridge_temp).state > id(high_temp_threshold).state) {
+                  new_power = 0.9;  // 90% power
+                } else if (id(fridge_temp).state > id(normal_temp_threshold).state) {
+                  new_power = 0.6;  // 60% power
+                } else if (id(fridge_temp).state < id(low_temp_threshold).state) {
+                  new_power = 0.3;  // 30% power
+                }
+
+                // Ambient temperature compensation
+                if (id(ambient_temp).state > 35.0) {
+                  new_power += 0.2;  // Boost for extreme heat
+                } else if (id(ambient_temp).state < 10.0) {
+                  new_power -= 0.2;  // Reduce for cold weather
+                }
+
+                // Ensure minimum power
+                if (new_power < 0.12) {
+                  new_power = 0.12;
+                }
+
+                // Only update if power changed significantly (>5%)
+                if (abs(new_power - id(cooling_power)) > 0.05) {
+                  id(cooling_power) = new_power;
+                  id(last_power_change) = current_time;
+                }
+
+                // Update runtime metrics if compressor is running
+                if (id(fridge_compressor).state) {
+                  id(compressor_runtime) += 10;  // Add 10 seconds
+                }
+          else:
+            # Error handling for invalid sensor readings
+            - logger.log: "Invalid sensor readings detected! Using safe default values."
+            - lambda: 'id(cooling_power) = 0.5;'  # Use 50% power as safe default
+
+      # Apply calculated power level
+      - output.set_level:
+          id: compressor_pwm
+          level: !lambda 'return id(cooling_power);'
+
+# Home Assistant Display Values
+text_sensor:
+  - platform: template
+    name: "Fridge Cooling Power"
+    lambda: |-
+      char buffer[10];
+      sprintf(buffer, "%.0f%%", id(cooling_power) * 100);
+      return {buffer};
+
+# Configurable Temperature Thresholds
+number:
+  - platform: template
+    name: "High Temperature Threshold"
+    id: high_temp_threshold
+    optimistic: true
+    min_value: 6
+    max_value: 15
+    step: 0.5
+    restore_value: true
+    initial_value: 10.0
+
+  - platform: template
+    name: "Normal Temperature Threshold"
+    id: normal_temp_threshold
+    optimistic: true
+    min_value: 3
+    max_value: 8
+    step: 0.5
+    restore_value: true
+    initial_value: 4.0
+
+  - platform: template
+    name: "Low Temperature Threshold"
+    id: low_temp_threshold
+    optimistic: true
+    min_value: 0
+    max_value: 5
+    step: 0.5
+    restore_value: true
+    initial_value: 2.0
