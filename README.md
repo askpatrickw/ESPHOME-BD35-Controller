@@ -56,3 +56,13 @@ integrating Home Assistant and an ESP32.
 | Compressor Speed Control | ESP32 GPIO14 (PWM Output) → BD35 C Terminal | Controls compressor speed dynamically |
 | | 100kΩ Resistor (BD35 C Terminal → GND) | Stabilizes PWM signal |
 | Compressor ON/OFF Control | Optocoupler on GPIO5 → BD35 T Terminal | Isolated control for BD35 T Terminal |
+
+## Repository Structure
+
+| File | Description |
+|------|-------------|
+| `bd35_controller.yaml` | Main ESPHome configuration for the BD35 compressor controller. Defines all sensors, controls, and automation logic. |
+| `.pre-commit-config.yaml` | Configuration for pre-commit hooks that run automated checks on code before committing. |
+| `.yamllint.yaml` | Custom rules for YAML linting, including ESPHome-specific configurations. |
+| `.markdownlint.yaml` | Configuration for Markdown linting rules. |
+| `.github/workflows/pre-commit.yaml` | GitHub Actions workflow that runs pre-commit checks on all pull requests. |
