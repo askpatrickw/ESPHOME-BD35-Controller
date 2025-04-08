@@ -1,0 +1,66 @@
+interval:
+  - interval: 10s
+    then:
+      # Sensor validation and error handling
+      - if:
+          condition:
+            lambda: |-
+              return !isnan(id(fridge_temp).state) &&
+                     !isnan(id(ambient_temp).state) &&
+                     id(fridge_temp).state > -50 &&
+                     id(fridge_temp).state < 50 &&
+                     id(ambient_temp).state > -50 &&
+                     id(ambient_temp).state < 50;
+          then:
+            # Temperature-based speed adjustment with hysteresis
+            - lambda: |-
+                float current_time = millis() / 1000.0;
+                float time_since_last_change = current_time - id(last_power_change);
+
+                // Only allow power changes every 60 seconds (hysteresis)
+                if (time_since_last_change < 60) {
+                  return;
+                }
+
+                float new_power = id(cooling_power);
+
+                // Temperature-based adjustments
+                if (id(fridge_temp).state > id(high_temp_threshold).state) {
+                  new_power = 0.9;  // 90% power
+                } else if (id(fridge_temp).state > id(normal_temp_threshold).state) {
+                  new_power = 0.6;  // 60% power
+                } else if (id(fridge_temp).state < id(low_temp_threshold).state) {
+                  new_power = 0.3;  // 30% power
+                }
+
+                // Ambient temperature compensation
+                if (id(ambient_temp).state > 35.0) {
+                  new_power += 0.2;  // Boost for extreme heat
+                } else if (id(ambient_temp).state < 10.0) {
+                  new_power -= 0.2;  // Reduce for cold weather
+                }
+
+                // Ensure minimum power
+                if (new_power < 0.12) {
+                  new_power = 0.12;
+                }
+
+                // Only update if power changed significantly (>5%)
+                if (abs(new_power - id(cooling_power)) > 0.05) {
+                  id(cooling_power) = new_power;
+                  id(last_power_change) = current_time;
+                }
+
+                // Update runtime metrics if compressor is running
+                if (id(fridge_compressor).state) {
+                  id(compressor_runtime) += 10;  // Add 10 seconds
+                }
+          else:
+            # Error handling for invalid sensor readings
+            - logger.log: "Invalid sensor readings detected! Using safe default values."
+            - lambda: 'id(cooling_power) = 0.5;'  # Use 50% power as safe default
+
+      # Apply calculated power level
+      - output.set_level:
+          id: compressor_pwm
+          level: !lambda 'return id(cooling_power);'
