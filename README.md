@@ -57,6 +57,10 @@ refrigerator, integrating Home Assistant and an ESP32.
 | | 100kΩ Resistor (BD35 C Terminal → GND) | Stabilizes PWM signal |
 | Compressor ON/OFF Control | Optocoupler on GPIO5 → BD35 T Terminal | Isolated control for BD35 T Terminal |
 
+## Wiring Diagram
+
+![Wiring Diagram](ESP32_BD35_Controller.png)
+
 ## Configuration Instructions
 
 ### 1. Edit the YAML Configuration
