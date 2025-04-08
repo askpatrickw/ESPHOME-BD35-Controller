@@ -97,7 +97,7 @@ sensor:
 switch:
   # Main Compressor Control via Optocoupler
   - platform: gpio
-    pin: GPIO5
+    pin: GPIO15
     id: fridge_compressor
     name: "Fridge Compressor"
     inverted: true
