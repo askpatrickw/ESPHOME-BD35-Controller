@@ -59,6 +59,16 @@ refrigerator, integrating Home Assistant and an ESP32.
 
 ## Wiring Diagram
 
+| ESP32  |  Resistor | Optocoupler      | BD35       |
+|--------|-----------|------------------|------------|
+| GPIO5  | 220kΩ     | Positive (Input) |            |
+| GND    |           | Negative (Input) |            |
+| 5V     |           | VCC (Output)     |            |
+|        |           | GND (Output)     | GND        |
+|        |           | OUT (Output)     | T Terminal |
+| GPIO14 |           |                  | C Terminal |
+|        | 100kΩ     |                  | C Terminal |
+
 ![Wiring Diagram](ESP32_BD35_Controller.png)
 
 ## Configuration Instructions
