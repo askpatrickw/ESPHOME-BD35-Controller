@@ -97,7 +97,7 @@ sensor:
 switch:
   # Main Compressor Control via Optocoupler
   - platform: gpio
-    pin: GPIO15
+    pin: GPIO5
     id: fridge_compressor
     name: "Fridge Compressor"
     inverted: true
@@ -132,7 +132,7 @@ switch:
 # PWM Speed Control for BD35 Compressor (ESP32 GPIO# → BD35 C Terminal)
 output:
   - platform: ledc
-    pin: GPIO14
+    pin: GPIO13
     id: compressor_pwm
     frequency: 50Hz  # BD35 expects 10-100Hz
 
