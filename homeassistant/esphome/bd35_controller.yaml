@@ -1,3 +1,13 @@
+# BD35 Fridge Controller Configuration for ESPHome
+# If you're using the same hardware setup as the original author, you
+# may only need to change this section.
+substitutions:
+  temp_refrigerator: "sensor.ruuvitag_refrigerator_temp"
+  temp_exterior: "sensor.ruuvitag_exterior_temp"
+  gpio_compressor_switch: "GPIO5"
+  gpio_compressor_speed: "GPIO13"
+
+
 esphome:
   name: bd35-fridge-controller
   friendly_name: "BD35 Controller"
@@ -23,7 +33,7 @@ ota:
   - platform: esphome
     password: "dGhpc0lzQW5vdGhlckJhc2U2NEVuY3J5cHRpb25LZXk="
 
-# # Network Configuration
+# # Ethernet Configuration
 # ethernet:
 #   type: LAN8720
 #   mdc_pin: GPIO23
@@ -36,10 +46,12 @@ ota:
 #     gateway: 10.10.0.1
 #     subnet: 255.255.255.0
 
-# WiFi Fallback Configuration
+# WiFi Configuration
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  power_save_mode: "NONE"
+  # Always include AP mode for recovery access
   ap:
     ssid: "BD35-Fridge-Fallback"
     password: !secret fallback_password
@@ -67,13 +79,13 @@ globals:
 sensor:
   # Fridge Temperature (from Home Assistant via BLE Ruuvi)
   - platform: homeassistant
-    entity_id: sensor.fridge_temperature
+    entity_id: ${temp_refrigerator}
     id: fridge_temp
     internal: true
 
   # Ambient Temperature (External Sensor or Home Assistant)
   - platform: homeassistant
-    entity_id: sensor.outside_temperature
+    entity_id: ${temp_exterior}
     id: ambient_temp
     internal: true
 
@@ -97,7 +109,7 @@ sensor:
 switch:
   # Main Compressor Control via Optocoupler
   - platform: gpio
-    pin: GPIO5
+    pin: ${gpio_compressor_switch}
     id: fridge_compressor
     name: "Fridge Compressor"
     inverted: true
@@ -132,7 +144,7 @@ switch:
 # PWM Speed Control for BD35 Compressor (ESP32 GPIO# → BD35 C Terminal)
 output:
   - platform: ledc
-    pin: GPIO13
+    pin: ${gpio_compressor_speed}
     id: compressor_pwm
     frequency: 50Hz  # BD35 expects 10-100Hz
 

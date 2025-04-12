@@ -53,7 +53,7 @@ refrigerator, integrating Home Assistant and an ESP32.
 | Main Controller | ESP32 Development Board | Controls cooling logic, runs ESPHome |
 | Fridge Sensors | Ruuvi BLE Temp Sensor (Inside fridge) | Reads internal fridge temperature |
 | | Ambient Temp Sensor (Ruuvi, DHT22, or BME280) | Reads outside temperature |
-| Compressor Speed Control | ESP32 GPIO14 (PWM Output) → BD35 C Terminal | Controls compressor speed dynamically |
+| Compressor Speed Control | ESP32 GPIO13 (PWM Output) → BD35 C Terminal | Controls compressor speed dynamically |
 | | 100kΩ Resistor (BD35 C Terminal → GND) | Stabilizes PWM signal |
 | Compressor ON/OFF Control | Optocoupler on GPIO5 → BD35 T Terminal | Isolated control for BD35 T Terminal |
 
@@ -66,7 +66,7 @@ refrigerator, integrating Home Assistant and an ESP32.
 | 5V     |           | VCC (Output)     |            |
 |        |           | GND (Output)     | GND        |
 |        |           | OUT (Output)     | T Terminal |
-| GPIO14 |           |                  | C Terminal |
+| GPIO13 |           |                  | C Terminal |
 |        | 100kΩ     |                  | C Terminal |
 
 ![Wiring Diagram](ESP32_BD35_Controller.png)
@@ -78,35 +78,49 @@ refrigerator, integrating Home Assistant and an ESP32.
 Before deploying, you need to customize the `bd35_controller.yaml` file to match
 your hardware and setup.
 
-#### **Temperature Sensors**
+#### Network Configuration
 
-Configure the sensors for fridge and ambient temperature readings. These are typically Home
-Assistant entities or external sensors like Ruuvi or DHT22. Update the `sensor`
-section in `bd35_controller.yaml`
+Only the Ethernet or the WiFi configuration can be used at a time. Comment out or delete
+the unused configuration.
 
-  ```yaml
-  sensor:
-    # Fridge Temperature (from Home Assistant via BLE Ruuvi)
-    - platform: homeassistant
-      entity_id: sensor.fridge_temperature
-      id: fridge_temp
-      internal: true
+If using Ethernet, ensure the configuration matches your hardware. You can find the necessary details in the
+   [ESPHOME documentation](https://esphome.io/components/ethernet).
 
-    # Ambient Temperature (External Sensor or Home Assistant)
-    - platform: homeassistant
-      entity_id: sensor.outside_temperature
-      id: ambient_temp
-      internal: true
-   ```
-
-#### WiFi and API Encryption
-
-WiFi credentials and fallback passwords are managed in Home Assistant's Secrets.
+If using WiFi:
 
 - wifi_ssid: Your WiFi network name.
 - wifi_password: Your WiFi network password.
 - fallback_password: Password for the fallback access point.
 - Replace the placeholder encryption key in the api section with a valid Base64-encoded 32-byte key.
+
+#### **Temperature Sensors**
+
+Configure the sensors for fridge and ambient temperature readings using substitutions at the top of the file. These should point to Home Assistant entity IDs.
+
+```yaml
+substitutions:
+temp_refrigerator: "sensor.ruuvitag_refrigerator_temp"
+temp_exterior: "sensor.ruuvitag_exterior_temp"
+gpio_compressor_switch: "GPIO5"
+gpio_compressor_speed: "GPIO13"
+```
+
+The sensors will be automatically configured based on these substitutions:
+
+```yaml
+sensor:
+   # Fridge Temperature (from Home Assistant via BLE Ruuvi)
+   - platform: homeassistant
+      entity_id: ${temp_refrigerator}
+      id: fridge_temp
+      internal: true
+
+   # Ambient Temperature (External Sensor or Home Assistant)
+   - platform: homeassistant
+      entity_id: ${temp_exterior}
+      id: ambient_temp
+      internal: true
+```
 
 #### Temperature Thresholds
 
